@@ -60,7 +60,7 @@ pub(crate) async fn udp_conn(
 
         let interval = IntervalStream::new(time::interval(Duration::from_millis(20)));
 
-        let mut stream = select(interval.map(|x| Either::Left(x)), fwd_rx.map(|x| Either::Right(x)));
+        let mut stream = select(interval.map(Either::Left), fwd_rx.map(Either::Right));
         let mut backoff = ExponentialBackoff::new(Duration::new(5, 0));
 
         loop {
@@ -98,18 +98,16 @@ pub(crate) async fn udp_conn(
                             .expect("Failed to connect to new target");
                         backoff.reset();
                     }
-                    Signal::NewMode(mode) => {
-                        if let DsMode::Simulation = mode {
-                            let mut state = send_state.send().lock().await;
-                            state.reset_seqnum();
-                            state.disable();
-                            send_state.recv().lock().await.reset();
-                            udp_tx
-                                .connect("127.0.0.1:1110")
-                                .await
-                                .expect("Failed to connect to simulator socket");
-                            backoff.reset();
-                        }
+                    Signal::NewMode(DsMode::Simulation) => {
+                        let mut state = send_state.send().lock().await;
+                        state.reset_seqnum();
+                        state.disable();
+                        send_state.recv().lock().await.reset();
+                        udp_tx
+                            .connect("127.0.0.1:1110")
+                            .await
+                            .expect("Failed to connect to simulator socket");
+                        backoff.reset();
                     }
                     _ => {}
                 },
@@ -119,11 +117,10 @@ pub(crate) async fn udp_conn(
 
     // I need the tokio extension for this, the futures extension to split codecs, and I can't import them both
     // Thanks for coordinating trait names to make using both nicely impossible
-    let fut = tokio_stream::StreamExt::timeout(udp_rx, Duration::from_secs(2)).map(|x| Either::Left(x));
-    let rx_mapped = rx.map(|x| Either::Right(x));
+    let fut = tokio_stream::StreamExt::timeout(udp_rx, Duration::from_secs(2)).map(Either::Left);
+    let rx_mapped = rx.map(Either::Right);
     let stream = select(fut, rx_mapped);
     tokio::pin!(stream);
-
 
     let mut connected = true;
     while let Some(item) = stream.next().await {

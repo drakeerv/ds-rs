@@ -1,7 +1,7 @@
 pub mod tags;
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]    
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct Status: u8 {
         const ESTOP = 0b1000_0000;
         const BROWNOUT = 0b0001_0000;

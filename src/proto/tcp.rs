@@ -12,7 +12,7 @@ pub mod outbound;
 pub struct DsTcpCodec;
 
 impl Encoder<TcpTag> for DsTcpCodec {
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn encode(&mut self, item: TcpTag, dst: &mut BytesMut) -> Result<(), Self::Error> {
         match item {
@@ -27,7 +27,7 @@ impl Encoder<TcpTag> for DsTcpCodec {
 
 impl Decoder for DsTcpCodec {
     type Item = TcpPacket;
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let mut buf = src.clone().freeze();
@@ -50,7 +50,7 @@ impl Decoder for DsTcpCodec {
             }
         }
 
-        use failure::bail;
+        use anyhow::bail;
         match inner(&mut buf) {
             Ok((packet, n)) => {
                 src.advance(n);

@@ -26,4 +26,4 @@ pub use self::proto::tcp::outbound::*;
 pub use self::proto::udp::inbound::types::Trace;
 pub use self::proto::udp::outbound::types::*;
 
-pub type Result<T> = std::result::Result<T, failure::Error>;
+pub type Result<T> = std::result::Result<T, anyhow::Error>;

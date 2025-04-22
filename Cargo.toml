@@ -14,11 +14,9 @@ edition = "2024"
 [dependencies]
 bitflags = "2.9"
 byteorder = "1.5"
-failure = "0.1"
 chrono = "0.4"
-crossbeam-channel = "0.5"
 smallvec = "1.15"
-tokio = { version = "1.44", features = ["macros", "rt-multi-thread", "time"] }
+tokio = { version = "1.44", features = ["rt-multi-thread", "time"] }
 tokio-util = { version = "0.7", features = ["codec", "net"] }
 bytes = "1.10"
 futures-channel = "0.3"
@@ -26,3 +24,4 @@ futures-util = { version = "0.3", features = ["sink", "async-await"] }
 futures = "0.3"
 fastrand = "2.3"
 tokio-stream = "0.1"
+anyhow = "1.0"

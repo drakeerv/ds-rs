@@ -52,7 +52,7 @@ impl ExponentialBackoff {
             return;
         }
 
-        let random_delay = Duration::from_millis(fastrand::u64(1..1000));
+        let random_delay = Duration::from_millis(fastrand::u64(1..=1000));
 
         let backoff_seconds = 2u64.pow(self.attempt as u32);
 

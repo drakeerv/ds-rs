@@ -11,7 +11,7 @@ pub struct DsUdpCodec;
 
 impl Decoder for DsUdpCodec {
     type Item = UdpResponsePacket;
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let mut buf = src.clone().freeze();
@@ -31,7 +31,7 @@ impl Decoder for DsUdpCodec {
 }
 
 impl Encoder<UdpControlPacket> for DsUdpCodec {
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn encode(&mut self, item: UdpControlPacket, dst: &mut BytesMut) -> Result<(), Self::Error> {
         dst.extend(item.encode().iter());

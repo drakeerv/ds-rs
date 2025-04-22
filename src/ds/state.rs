@@ -83,8 +83,8 @@ impl Mode {
     }
 
     /// Converts this `Mode` into a `Control` byte that can be modified for encoding the control packet.
-    fn to_control(&self) -> Control {
-        match *self {
+    fn to_control(self) -> Control {
+        match self {
             Mode::Teleoperated => Control::TELEOP,
             Mode::Autonomous => Control::AUTO,
             Mode::Test => Control::TEST,

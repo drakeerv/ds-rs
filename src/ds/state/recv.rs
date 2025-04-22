@@ -3,7 +3,7 @@ use crate::TcpPacket;
 use crate::ds::state::TcpConsumer;
 use crate::proto::tcp::outbound::TcpTag;
 use crate::proto::udp::inbound::types::*;
-use failure::format_err;
+use anyhow::format_err;
 use futures_channel::mpsc::UnboundedSender;
 
 /// All the data received from roboRIO UDP status packets that isn't already encoded in the send state

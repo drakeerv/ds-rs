@@ -9,10 +9,7 @@ pub(crate) fn to_u8_vec(vec_in: &[bool]) -> Vec<u8> {
         let mut num: u8 = 0;
         for j in i..i + 8 {
             num <<= 1;
-            num |= *match vec_in.get(j) {
-                Some(a) => a,
-                None => &false,
-            } as u8;
+            num |= *vec_in.get(j).unwrap_or(&false) as u8;
         }
         vec.push(reverse_byte(num));
     }
@@ -38,7 +35,8 @@ pub(crate) fn ip_from_team_number(team: u32) -> String {
         1 | 2 => format!("10.0.{}.2", team),
         3 => format!("10.{}.{}.2", &s[0..1], &s[1..3]),
         4 => format!("10.{}.{}.2", &s[0..2], &s[2..4]),
-        _ => unreachable!(), // Team numbers shouldn't be >4 characters
+        5 => format!("10.{}.{}.2", &s[0..3], &s[3..5]),
+        _ => unreachable!(), // Team numbers shouldn't be >5 characters
     }
 }
 

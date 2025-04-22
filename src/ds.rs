@@ -1,4 +1,4 @@
-use failure::bail;
+use anyhow::bail;
 
 use std::thread;
 
@@ -222,25 +222,19 @@ impl JoystickValue {
         }
     }
 
+    #[inline(always)]
     pub fn is_axis(self) -> bool {
-        match self {
-            JoystickValue::Axis { .. } => true,
-            _ => false,
-        }
+        matches!(self, JoystickValue::Axis { .. })
     }
 
+    #[inline(always)]
     pub fn is_button(self) -> bool {
-        match self {
-            JoystickValue::Button { .. } => true,
-            _ => false,
-        }
+        matches!(self, JoystickValue::Button { .. })
     }
 
+    #[inline(always)]
     pub fn is_pov(self) -> bool {
-        match self {
-            JoystickValue::POV { .. } => true,
-            _ => false,
-        }
+        matches!(self, JoystickValue::POV { .. })
     }
 }
 
