@@ -69,7 +69,7 @@ impl SendState {
     /// if [self.joystick_provider] is Some, it will be used to construct the joysticks tag
     /// if [self.request] is Some, its value will be consumed and sent to the roboRIO
     pub fn control(&mut self) -> UdpControlPacket {
-        if let Some(ref supplier) = &self.joystick_provider {
+        if let Some(supplier) = &self.joystick_provider {
             let joysticks = supplier();
 
             // Joystick tags come one after another, iterate over the outer Vec and queue with each loop

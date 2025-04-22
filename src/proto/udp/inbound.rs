@@ -2,8 +2,8 @@ pub mod types;
 
 use self::types::*;
 
-use crate::ext::BufExt;
 use crate::Result;
+use crate::ext::BufExt;
 
 use bytes::Buf;
 

@@ -1,6 +1,7 @@
 pub mod tags;
 
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]    
     pub struct Status: u8 {
         const ESTOP = 0b1000_0000;
         const BROWNOUT = 0b0001_0000;
@@ -25,6 +26,7 @@ impl Status {
 }
 
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct Trace: u8 {
         const ROBOT_CODE = 0b0010_0000;
         const IS_ROBORIO = 0b0001_0000;

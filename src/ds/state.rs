@@ -1,10 +1,10 @@
 use super::JoystickValue;
 
+use crate::TcpPacket;
 use crate::ds::state::recv::{RecvState, TcpState};
 use crate::ds::state::send::SendState;
 use crate::proto::udp::inbound::types::Status;
 use crate::proto::udp::outbound::types::{Alliance, Control};
-use crate::TcpPacket;
 use std::fmt::Debug;
 use tokio::sync::Mutex;
 

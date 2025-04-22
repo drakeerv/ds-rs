@@ -1,8 +1,8 @@
+use crate::Result;
+use crate::TcpPacket;
 use crate::ds::state::TcpConsumer;
 use crate::proto::tcp::outbound::TcpTag;
 use crate::proto::udp::inbound::types::*;
-use crate::Result;
-use crate::TcpPacket;
 use failure::format_err;
 use futures_channel::mpsc::UnboundedSender;
 

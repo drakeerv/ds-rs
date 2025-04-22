@@ -1,6 +1,6 @@
+use crate::Result;
 use crate::ext::BufExt;
 use crate::util::InboundTag;
-use crate::Result;
 use bytes::Buf;
 
 macro_rules! gen_stub_tags {

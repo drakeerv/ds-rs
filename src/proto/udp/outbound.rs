@@ -21,7 +21,7 @@ impl UdpControlPacket {
         buf.push(0x01); // comm version
         buf.push(self.control.bits());
         match &self.request {
-            Some(ref req) => buf.push(req.bits()),
+            Some(req) => buf.push(req.bits()),
             None => buf.push(0),
         }
 

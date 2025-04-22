@@ -4,21 +4,22 @@ use crate::proto::udp::inbound::UdpResponsePacket;
 use crate::proto::udp::outbound::types::tags::{DateTime as DTTag, *};
 
 use futures_channel::mpsc::UnboundedReceiver;
-use futures_channel::mpsc::{unbounded, UnboundedSender};
+use futures_channel::mpsc::{UnboundedSender, unbounded};
 use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpStream, UdpSocket};
 use tokio::time;
+use tokio_stream::wrappers::IntervalStream;
 use tokio_util::codec::Decoder;
 use tokio_util::udp::UdpFramed;
 
 use chrono::prelude::*;
 
+use crate::Result;
 use crate::proto::tcp::DsTcpCodec;
 use crate::proto::udp::DsUdpCodec;
-use crate::Result;
 
 use crate::ds::state::{DsMode, DsState};
 use crate::proto::tcp::outbound::TcpTag;
@@ -57,9 +58,9 @@ pub(crate) async fn udp_conn(
             .await
             .expect("Failed to connect to target");
 
-        let interval = time::interval(Duration::from_millis(20));
+        let interval = IntervalStream::new(time::interval(Duration::from_millis(20)));
 
-        let mut stream = select(interval.map(Either::Left), fwd_rx.map(Either::Right));
+        let mut stream = select(interval.map(|x| Either::Left(x)), fwd_rx.map(|x| Either::Right(x)));
         let mut backoff = ExponentialBackoff::new(Duration::new(5, 0));
 
         loop {
@@ -118,8 +119,11 @@ pub(crate) async fn udp_conn(
 
     // I need the tokio extension for this, the futures extension to split codecs, and I can't import them both
     // Thanks for coordinating trait names to make using both nicely impossible
-    let fut = tokio::stream::StreamExt::timeout(udp_rx, Duration::from_secs(2)).map(Either::Left);
-    let mut stream = select(fut, rx.map(Either::Right));
+    let fut = tokio_stream::StreamExt::timeout(udp_rx, Duration::from_secs(2)).map(|x| Either::Left(x));
+    let rx_mapped = rx.map(|x| Either::Right(x));
+    let stream = select(fut, rx_mapped);
+    tokio::pin!(stream);
+
 
     let mut connected = true;
     while let Some(item) = stream.next().await {
@@ -135,13 +139,13 @@ pub(crate) async fn udp_conn(
 
                         if packet.need_date {
                             let local = Utc::now();
-                            let micros = local.naive_utc().timestamp_subsec_micros();
+                            let micros = local.naive_utc().and_utc().timestamp_subsec_micros();
                             let second = local.time().second() as u8;
                             let minute = local.time().minute() as u8;
                             let hour = local.time().hour() as u8;
-                            let day = local.date().day() as u8;
-                            let month = local.date().month0() as u8;
-                            let year = (local.date().year() - 1900) as u8;
+                            let day = local.date_naive().day() as u8;
+                            let month = local.date_naive().month0() as u8;
+                            let year = (local.date_naive().year() - 1900) as u8;
                             let tag = DTTag::new(micros, second, minute, hour, day, month, year);
                             state.send().lock().await.queue_udp(UdpTag::DateTime(tag));
                         }
@@ -258,7 +262,7 @@ pub(crate) async fn sim_conn(tx: UnboundedSender<Signal>) -> Result<()> {
     use tokio::time::timeout;
     const SOCK_TIMEOUT: Duration = Duration::from_millis(250);
 
-    let mut sock = UdpSocket::bind("127.0.0.1:1135").await?;
+    let sock = UdpSocket::bind("127.0.0.1:1135").await?;
     let mut buf = [0];
     let mut opmode = DsMode::Normal;
     loop {

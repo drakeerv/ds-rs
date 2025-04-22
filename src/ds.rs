@@ -11,7 +11,7 @@ use self::state::*;
 use futures::executor::block_on;
 use std::sync::Arc;
 
-use futures_channel::mpsc::{unbounded, UnboundedSender};
+use futures_channel::mpsc::{UnboundedSender, unbounded};
 
 use crate::proto::tcp::outbound::{GameData, TcpTag};
 use crate::proto::udp::inbound::types::Trace;
@@ -55,7 +55,7 @@ impl DriverStation {
         let sim_tx = tx.clone();
         thread::spawn(move || {
             use tokio::runtime::Runtime;
-            let mut rt = Runtime::new().unwrap();
+            let rt = Runtime::new().unwrap();
             rt.spawn(sim_conn(sim_tx));
             rt.block_on(udp_conn(udp_state, udp_ip, rx))
                 .expect("Error with udp connection");

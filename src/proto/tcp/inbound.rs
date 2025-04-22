@@ -1,5 +1,5 @@
-use crate::ext::BufExt;
 use crate::Result as CResult;
+use crate::ext::BufExt;
 use bytes::Buf;
 use std::io::{Error, ErrorKind};
 use std::str;
