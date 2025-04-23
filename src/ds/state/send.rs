@@ -27,6 +27,7 @@ pub struct SendState {
 }
 
 impl SendState {
+    #[inline(always)]
     pub const fn new(alliance: Alliance) -> SendState {
         SendState {
             mode: Mode::Autonomous,
@@ -70,11 +71,11 @@ impl SendState {
     /// if [self.joystick_provider] is Some, it will be used to construct the joysticks tag
     /// if [self.request] is Some, its value will be consumed and sent to the roboRIO
     pub fn control(&mut self) -> UdpControlPacket {
-        if let Some(supplier) = &self.joystick_provider {
+        if let Some(ref supplier) = self.joystick_provider {
             let joysticks = supplier();
 
             // Joystick tags come one after another, iterate over the outer Vec and queue with each loop
-            for joystick in &joysticks {
+            for joystick in joysticks {
                 let mut axes = vec![0; 6];
                 let mut buttons = vec![false; 10];
                 let mut povs = vec![-1i16];
@@ -83,28 +84,28 @@ impl SendState {
                     // If statements bound check to stop it from crashing
                     match value {
                         JoystickValue::Button { id, pressed } => {
-                            if *id >= 1 && *id <= 10 {
+                            if id >= 1 && id <= 10 {
                                 let id = id - 1;
                                 buttons.remove(id as usize);
-                                buttons.insert(id as usize, *pressed)
+                                buttons.insert(id as usize, pressed)
                             }
                         }
                         JoystickValue::Axis { id, value } => {
-                            if *id <= 5 {
-                                let value = if (*value - 1.0).abs() < f32::EPSILON {
+                            if id <= 5 {
+                                let value = if (value - 1.0).abs() < f32::EPSILON {
                                     127i8
                                 } else {
                                     (value * 128f32) as i8
                                 };
 
-                                axes.remove(*id as usize);
-                                axes.insert(*id as usize, value);
+                                axes.remove(id as usize);
+                                axes.insert(id as usize, value);
                             }
                         }
                         JoystickValue::POV { id, angle } => {
-                            if *id == 0 {
-                                povs.remove(*id as usize);
-                                povs.insert(*id as usize, *angle);
+                            if id == 0 {
+                                povs.remove(id as usize);
+                                povs.insert(id as usize, angle);
                             }
                         }
                     }
@@ -146,8 +147,8 @@ impl SendState {
     }
 
     #[inline(always)]
-    pub const fn mode(&self) -> &Mode {
-        &self.mode
+    pub const fn mode(&self) -> Mode {
+        self.mode
     }
 
     pub fn set_mode(&mut self, mode: Mode) {
@@ -155,8 +156,8 @@ impl SendState {
     }
 
     #[inline(always)]
-    pub const fn ds_mode(&self) -> &DsMode {
-        &self.dsmode
+    pub const fn ds_mode(&self) -> DsMode {
+        self.dsmode
     }
 
     pub fn set_ds_mode(&mut self, mode: DsMode) {
