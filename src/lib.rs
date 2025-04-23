@@ -14,7 +14,6 @@
 
 #[macro_use]
 extern crate bitflags;
-extern crate smallvec;
 
 mod ds;
 mod ext;

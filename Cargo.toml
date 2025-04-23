@@ -15,7 +15,6 @@ edition = "2024"
 bitflags = "2.9"
 byteorder = "1.5"
 chrono = "0.4"
-smallvec = "1.15"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
 bytes = "1.10"
 futures-util = { version = "0.3", features = ["sink"] }

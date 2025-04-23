@@ -33,7 +33,12 @@ impl DriverStation {
     /// This driver station will attempt to connect to a roboRIO at 10.TE.AM.2,
     /// if the roboRIO is at a different ip, use [new] and specify the ip directly.
     pub async fn new_team(team_number: u32, alliance: Alliance) -> DriverStation {
-        Self::new(&ip_from_team_number(team_number), alliance, team_number).await
+        Self::new(
+            &ip_from_team_number(team_number).expect("Invalid Team Number"),
+            alliance,
+            team_number,
+        )
+        .await
     }
 
     /// Creates a new driver station for the given alliance station and team number
@@ -105,7 +110,9 @@ impl DriverStation {
     pub fn set_team_number(&mut self, team_number: u32) {
         self.team_number = team_number;
         self.thread_tx
-            .send(Signal::NewTarget(ip_from_team_number(team_number)))
+            .send(Signal::NewTarget(
+                ip_from_team_number(team_number).expect("Invalid Team Number"),
+            ))
             .unwrap();
     }
 
@@ -116,7 +123,9 @@ impl DriverStation {
                 .unwrap();
         } else {
             self.thread_tx
-                .send(Signal::NewTarget(ip_from_team_number(self.team_number)))
+                .send(Signal::NewTarget(
+                    ip_from_team_number(self.team_number).expect("Invalid Team Number"),
+                ))
                 .unwrap();
         }
     }
