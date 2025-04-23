@@ -1,8 +1,9 @@
 //! This module contains various tags that can be attached to the outbound UDP packet
 //! The `Tag` trait contains the core logic, and is inherited by structs with specific roles
 
-use byteorder::{BigEndian, WriteBytesExt};
+use bytes::{BufMut, Bytes, BytesMut};
 
+// Assuming this helper still exists and returns Vec<u8> or preferably Bytes
 use crate::util::to_u8_vec;
 
 /// Enum wrapping possible outgoing UDP tags
@@ -20,17 +21,34 @@ pub enum UdpTag {
 
 /// Represents an outgoing UDP tag
 pub(crate) trait Tag: Send {
-    fn id(&self) -> usize;
+    /// Returns the unique ID byte for this tag type.
+    fn id(&self) -> u8;
 
-    fn data(&self) -> Vec<u8>;
+    /// Returns the serialized data payload for this tag as immutable Bytes.
+    fn data(&self) -> Bytes;
 
-    fn construct(&self) -> Vec<u8> {
-        let mut buf = vec![self.id() as u8];
-        buf.extend(self.data());
+    /// Constructs the final tag bytes including the length prefix and ID.
+    /// Format: Length (u8) | ID (u8) | Data (...)
+    fn construct(&self) -> Bytes {
+        let id_byte = self.id();
+        let data_bytes = self.data();
+        let data_len = data_bytes.len();
 
-        buf.insert(0, buf.len() as u8);
+        let payload_len = 1 + data_len;
 
-        buf
+        assert!(
+            payload_len <= u8::MAX as usize,
+            "Tag payload too large for u8 length field"
+        );
+
+        let total_len = 1 + payload_len;
+        let mut buf = BytesMut::with_capacity(total_len);
+
+        buf.put_u8(payload_len as u8);
+        buf.put_u8(id_byte);
+        buf.put(data_bytes);
+
+        buf.freeze()
     }
 }
 
@@ -51,15 +69,14 @@ impl Countdown {
 
 impl Tag for Countdown {
     #[inline(always)]
-    fn id(&self) -> usize {
+    fn id(&self) -> u8 {
         0x07
     }
 
-    fn data(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(2);
-        buf.write_f32::<BigEndian>(self.seconds_remaining).unwrap();
-
-        buf
+    fn data(&self) -> Bytes {
+        let mut buf = BytesMut::with_capacity(4);
+        buf.put_f32(self.seconds_remaining);
+        buf.freeze()
     }
 }
 
@@ -73,7 +90,7 @@ pub struct Joysticks {
 
 impl Joysticks {
     #[inline(always)]
-    pub const fn new(axes: Vec<i8>, buttons: Vec<bool>, povs: Vec<i16>) -> Joysticks {
+    pub fn new(axes: Vec<i8>, buttons: Vec<bool>, povs: Vec<i16>) -> Joysticks {
         Joysticks {
             axes,
             buttons,
@@ -84,29 +101,47 @@ impl Joysticks {
 
 impl Tag for Joysticks {
     #[inline(always)]
-    fn id(&self) -> usize {
+    fn id(&self) -> u8 {
         0x0c
     }
 
-    fn data(&self) -> Vec<u8> {
-        let mut buf = vec![];
-        buf.write_u8(self.axes.len() as u8).unwrap();
+    fn data(&self) -> Bytes {
+        let buttons_packed = to_u8_vec(&self.buttons);
+        let capacity = 1 // axes count
+                     + self.axes.len() // Each i8 is 1 byte
+                     + 1 // button count
+                     + buttons_packed.len()
+                     + 1 // pov count
+                     + (self.povs.len() * 2); // Each i16 is 2 bytes
+        let mut buf = BytesMut::with_capacity(capacity);
+
+        assert!(
+            self.axes.len() <= u8::MAX as usize,
+            "Too many axes for u8 count"
+        );
+        buf.put_u8(self.axes.len() as u8);
+
         for axis in &self.axes {
-            buf.write_i8(*axis).unwrap();
+            buf.put_i8(*axis);
         }
 
-        let buttons = to_u8_vec(&self.buttons);
+        assert!(
+            self.buttons.len() <= u8::MAX as usize,
+            "Too many buttons for u8 count"
+        );
+        buf.put_u8(self.buttons.len() as u8);
+        buf.extend_from_slice(&buttons_packed);
 
-        buf.push(10);
-        buf.extend(buttons);
-
-        buf.push(self.povs.len() as u8);
-
+        assert!(
+            self.povs.len() <= u8::MAX as usize,
+            "Too many POVs for u8 count"
+        );
+        buf.put_u8(self.povs.len() as u8);
         for pov in &self.povs {
-            buf.write_i16::<BigEndian>(*pov).unwrap();
+            buf.put_i16(*pov);
         }
 
-        buf
+        buf.freeze()
     }
 }
 
@@ -124,7 +159,7 @@ pub struct DateTime {
 
 impl DateTime {
     #[inline(always)]
-    pub const fn new(
+    pub fn new(
         micros: u32,
         second: u8,
         minute: u8,
@@ -147,21 +182,20 @@ impl DateTime {
 
 impl Tag for DateTime {
     #[inline(always)]
-    fn id(&self) -> usize {
+    fn id(&self) -> u8 {
         0x0f
     }
 
-    fn data(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        buf.write_u32::<BigEndian>(self.micros).unwrap();
-        buf.push(self.second);
-        buf.push(self.minute);
-        buf.push(self.hour);
-        buf.push(self.day);
-        buf.push(self.month);
-        buf.push(self.year);
-
-        buf
+    fn data(&self) -> Bytes {
+        let mut buf = BytesMut::with_capacity(4 + 1 + 1 + 1 + 1 + 1 + 1);
+        buf.put_u32(self.micros);
+        buf.put_u8(self.second);
+        buf.put_u8(self.minute);
+        buf.put_u8(self.hour);
+        buf.put_u8(self.day);
+        buf.put_u8(self.month);
+        buf.put_u8(self.year);
+        buf.freeze()
     }
 }
 
@@ -180,15 +214,12 @@ impl Timezone {
 
 impl Tag for Timezone {
     #[inline(always)]
-    fn id(&self) -> usize {
+    fn id(&self) -> u8 {
         0x10
     }
 
-    fn data(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        buf.extend_from_slice(self.tz.as_bytes());
-
-        buf
+    fn data(&self) -> Bytes {
+        Bytes::from(self.tz.clone())
     }
 }
 
@@ -197,12 +228,44 @@ mod test {
     use super::*;
 
     #[test]
-    fn verify_format() {
-        let countdown = Countdown {
-            seconds_remaining: 2f32,
-        };
+    fn verify_countdown_format() {
+        let countdown = Countdown::new(2.0f32);
         let buf = countdown.construct();
+        assert_eq!(buf.as_ref(), &[0x05, 0x07, 0x40, 0x00, 0x00, 0x00]);
+    }
 
-        assert_eq!(buf, &[0x05, 0x07, 0x040, 0x0, 0x0, 0x0]);
+    #[test]
+    fn verify_joysticks_format() {
+        let joysticks = Joysticks::new(
+            vec![-128, 0, 127],
+            vec![true, false, true, false, false, false, false, false, true],
+            vec![0, 18000],
+        );
+        let buf = joysticks.construct();
+        assert_eq!(
+            buf.as_ref(),
+            &[
+                0x0D, 0x0c, 0x03, 0x80, 0x00, 0x7F, 0x09, 0x05, 0x01, 0x02, 0x00, 0x00, 0x46, 0x50
+            ]
+        );
+    }
+
+    #[test]
+    fn verify_datetime_format() {
+        let dt = DateTime::new(123456, 30, 55, 17, 23, 4, 124);
+        let buf = dt.construct();
+        assert_eq!(
+            buf.as_ref(),
+            &[
+                0x0B, 0x0f, 0x00, 0x01, 0xE2, 0x40, 0x1E, 0x37, 0x11, 0x17, 0x04, 0x7C
+            ]
+        );
+    }
+
+    #[test]
+    fn verify_timezone_format() {
+        let tz = Timezone::new("UTC");
+        let buf = tz.construct();
+        assert_eq!(buf.as_ref(), &[0x04, 0x10, 0x55, 0x54, 0x43]);
     }
 }

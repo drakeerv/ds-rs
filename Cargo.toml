@@ -13,7 +13,6 @@ edition = "2024"
 
 [dependencies]
 bitflags = "2.9"
-byteorder = "1.5"
 chrono = "0.4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
 bytes = "1.10"
