@@ -141,7 +141,7 @@ pub(crate) async fn udp_conn(
                         if !tcp_connected {
                             let (tx, rx) = unbounded_channel::<Signal>();
                             tcp_tx = Some(tx);
-                            let mode = *state.send().read().await.ds_mode();
+                            let mode = state.send().read().await.ds_mode();
                             if mode == DsMode::Normal {
                                 tokio::spawn(tcp_conn(state.clone(), target_ip.clone(), rx));
                             } else {
@@ -184,7 +184,7 @@ pub(crate) async fn udp_conn(
                     fwd_tx.send(sig.unwrap())?;
                 }
                 Some(Signal::NewMode(mode)) => {
-                    let current_mode = *state.send().read().await.ds_mode();
+                    let current_mode = state.send().read().await.ds_mode();
                     if mode != current_mode {
                         if let Some(ref tcp_tx) = tcp_tx {
                             let _ = tcp_tx.send(Signal::Disconnect);

@@ -37,20 +37,15 @@ pub(crate) fn to_u8_vec(vec_in: &[bool]) -> Vec<u8> {
 /// Converts the given team number into a String containing the IP of the roboRIO
 /// Assumes the roboRIO will exist at 10.TE.AM.2
 /// Optimized version using integer arithmetic.
-pub(crate) fn ip_from_team_number(team: u32) -> Option<String> {
-    if team >= 100000 {
-        // Team number is to large. Mayber in the distant future of 3000 this might break.
-        return None;
-    }
-
+pub(crate) fn ip_from_team_number(team: u16) -> String {
     if team < 100 {
         // Format as 10.0.AM.2 where AM is the team number
-        Some(format!("10.0.{}.2", team))
+        format!("10.0.{}.2", team)
     } else {
         // Covers 3, 4, and 5 digit numbers (team >= 100 and team < 100000)
         let te = team / 100; // Integer division gives the "TE" part
         let am = team % 100; // Modulo gives the "AM" part
-        Some(format!("10.{}.{}.2", te, am))
+        format!("10.{}.{}.2", te, am)
     }
 }
 

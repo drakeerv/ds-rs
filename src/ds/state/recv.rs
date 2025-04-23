@@ -73,8 +73,8 @@ impl RecvState {
     }
 
     #[inline(always)]
-    pub const fn trace(&self) -> &Trace {
-        &self.trace
+    pub const fn trace(&self) -> Trace {
+        self.trace
     }
 
     pub fn set_trace(&mut self, trace: Trace) {

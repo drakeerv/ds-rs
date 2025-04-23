@@ -23,7 +23,7 @@ use crate::{Result, TcpPacket};
 /// and also manages the threads that manage network connections and joysticks
 pub struct DriverStation {
     thread_tx: UnboundedSender<Signal>,
-    team_number: u32,
+    team_number: u16,
     state: Arc<DsState>,
 }
 
@@ -32,7 +32,7 @@ impl DriverStation {
     ///
     /// This driver station will attempt to connect to a roboRIO at 10.TE.AM.2,
     /// if the roboRIO is at a different ip, use [new] and specify the ip directly.
-    pub async fn new_team(team_number: u32, alliance: Alliance) -> DriverStation {
+    pub async fn new_team(team_number: u16, alliance: Alliance) -> DriverStation {
         Self::new(
             &ip_from_team_number(team_number).expect("Invalid Team Number"),
             alliance,
@@ -43,7 +43,7 @@ impl DriverStation {
 
     /// Creates a new driver station for the given alliance station and team number
     /// Connects to the roborio at `ip`. To infer the ip from team_number, use `new_team` instead.
-    pub async fn new(ip: &str, alliance: Alliance, team_number: u32) -> DriverStation {
+    pub async fn new(ip: &str, alliance: Alliance, team_number: u16) -> DriverStation {
         // Channels to communicate to the threads that make up the application, used to break out of infinite loops when the struct is dropped
         let (tx, rx) = unbounded_channel::<Signal>();
 
@@ -102,12 +102,12 @@ impl DriverStation {
     }
 
     pub async fn ds_mode(&self) -> DsMode {
-        *self.state.send().read().await.ds_mode()
+        self.state.send().read().await.ds_mode()
     }
 
     /// Changes the team number of this driver station, as well as the ip the driver station will attempt to connect to.
     /// The ip of the new roboRIO target is 10.TE.AM.2
-    pub fn set_team_number(&mut self, team_number: u32) {
+    pub fn set_team_number(&mut self, team_number: u16) {
         self.team_number = team_number;
         self.thread_tx
             .send(Signal::NewTarget(
@@ -131,7 +131,7 @@ impl DriverStation {
     }
 
     #[inline(always)]
-    pub const fn team_number(&self) -> u32 {
+    pub const fn team_number(&self) -> u16 {
         self.team_number
     }
 
@@ -154,7 +154,7 @@ impl DriverStation {
 
     /// Returns the current mode of the robot
     pub async fn mode(&self) -> Mode {
-        *self.state.send().read().await.mode()
+        self.state.send().read().await.mode()
     }
 
     /// Enables outputs on the robot
@@ -187,7 +187,7 @@ impl DriverStation {
 
     /// Returns the last received Trace from the robot
     pub async fn trace(&self) -> Trace {
-        *self.state.recv().read().await.trace()
+        self.state.recv().read().await.trace()
     }
 
     /// Returns the last received battery voltage from the robot
