@@ -6,7 +6,7 @@ use crate::ds::state::send::SendState;
 use crate::proto::udp::inbound::types::Status;
 use crate::proto::udp::outbound::types::{Alliance, Control};
 use std::fmt::Debug;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 mod recv;
 mod send;
@@ -27,18 +27,18 @@ pub enum DsMode {
 /// The core state of the driver station, containing locks over all relevant substates
 pub struct DsState {
     /// The state associated with the sending UDP socket
-    send_state: Mutex<SendState>,
+    send_state: RwLock<SendState>,
     /// The state associated with the receiving UDP socket
-    recv_state: Mutex<RecvState>,
+    recv_state: RwLock<RecvState>,
     /// The state associated with the TCP socket
-    tcp_state: Mutex<TcpState>,
+    tcp_state: RwLock<TcpState>,
 }
 
 impl DsState {
     pub fn new(alliance: Alliance) -> DsState {
-        let send_state = Mutex::new(SendState::new(alliance));
-        let recv_state = Mutex::new(RecvState::new());
-        let tcp_state = Mutex::new(TcpState::new());
+        let send_state = RwLock::new(SendState::new(alliance));
+        let recv_state = RwLock::new(RecvState::new());
+        let tcp_state = RwLock::new(TcpState::new());
 
         DsState {
             send_state,
@@ -47,15 +47,18 @@ impl DsState {
         }
     }
 
-    pub fn send(&self) -> &Mutex<SendState> {
+    #[inline(always)]
+    pub const fn send(&self) -> &RwLock<SendState> {
         &self.send_state
     }
 
-    pub fn recv(&self) -> &Mutex<RecvState> {
+    #[inline(always)]
+    pub const fn recv(&self) -> &RwLock<RecvState> {
         &self.recv_state
     }
 
-    pub fn tcp(&self) -> &Mutex<TcpState> {
+    #[inline(always)]
+    pub const fn tcp(&self) -> &RwLock<TcpState> {
         &self.tcp_state
     }
 }
@@ -83,7 +86,8 @@ impl Mode {
     }
 
     /// Converts this `Mode` into a `Control` byte that can be modified for encoding the control packet.
-    fn to_control(self) -> Control {
+    #[inline(always)]
+    const fn to_control(self) -> Control {
         match self {
             Mode::Teleoperated => Control::TELEOP,
             Mode::Autonomous => Control::AUTO,

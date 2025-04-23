@@ -16,11 +16,13 @@ bitflags! {
 }
 
 impl Status {
-    pub fn is_browning_out(self) -> bool {
+    #[inline(always)]
+    pub const fn is_browning_out(self) -> bool {
         self.contains(Status::BROWNOUT)
     }
 
-    pub fn emergency_stopped(self) -> bool {
+    #[inline(always)]
+    pub const fn emergency_stopped(self) -> bool {
         self.contains(Status::ESTOP)
     }
 }
@@ -41,7 +43,8 @@ macro_rules! gen_trace_methods {
     ($($func_name:ident => $flag_name:expr),+) => {
         impl Trace {
             $(
-            pub fn $func_name(self) -> bool {
+            #[inline(always)]
+            pub const fn $func_name(self) -> bool {
                 self.contains($flag_name)
             }
             )+

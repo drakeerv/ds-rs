@@ -1,17 +1,14 @@
 use anyhow::bail;
 
-use std::thread;
-
 mod conn;
 pub(crate) mod state;
 
 use self::conn::*;
 use self::state::*;
 
-use futures::executor::block_on;
 use std::sync::Arc;
 
-use futures_channel::mpsc::{UnboundedSender, unbounded};
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 use crate::proto::tcp::outbound::{GameData, TcpTag};
 use crate::proto::udp::inbound::types::Trace;
@@ -35,15 +32,15 @@ impl DriverStation {
     ///
     /// This driver station will attempt to connect to a roboRIO at 10.TE.AM.2,
     /// if the roboRIO is at a different ip, use [new] and specify the ip directly.
-    pub fn new_team(team_number: u32, alliance: Alliance) -> DriverStation {
-        Self::new(&ip_from_team_number(team_number), alliance, team_number)
+    pub async fn new_team(team_number: u32, alliance: Alliance) -> DriverStation {
+        Self::new(&ip_from_team_number(team_number), alliance, team_number).await
     }
 
     /// Creates a new driver station for the given alliance station and team number
     /// Connects to the roborio at `ip`. To infer the ip from team_number, use `new_team` instead.
-    pub fn new(ip: &str, alliance: Alliance, team_number: u32) -> DriverStation {
+    pub async fn new(ip: &str, alliance: Alliance, team_number: u32) -> DriverStation {
         // Channels to communicate to the threads that make up the application, used to break out of infinite loops when the struct is dropped
-        let (tx, rx) = unbounded::<Signal>();
+        let (tx, rx) = unbounded_channel::<Signal>();
 
         // Global state of the driver station
         let state = Arc::new(DsState::new(alliance));
@@ -53,13 +50,12 @@ impl DriverStation {
         let udp_ip = ip.to_owned();
 
         let sim_tx = tx.clone();
-        thread::spawn(move || {
-            use tokio::runtime::Runtime;
-            let rt = Runtime::new().unwrap();
-            rt.spawn(sim_conn(sim_tx));
-            rt.block_on(udp_conn(udp_state, udp_ip, rx))
-                .expect("Error with udp connection");
+        tokio::spawn(async {
+            sim_conn(sim_tx).await.unwrap();
         });
+        udp_conn(udp_state, udp_ip, rx)
+            .await
+            .expect("Error with udp connection");
 
         DriverStation {
             thread_tx: tx,
@@ -69,32 +65,39 @@ impl DriverStation {
     }
 
     /// Provides a closure that will be called when constructing outbound packets to append joystick values
-    pub fn set_joystick_supplier(
+    pub async fn set_joystick_supplier(
         &mut self,
         supplier: impl Fn() -> Vec<Vec<JoystickValue>> + Send + Sync + 'static,
     ) {
-        block_on(self.state.send().lock()).set_joystick_supplier(supplier);
+        self.state
+            .send()
+            .write()
+            .await
+            .set_joystick_supplier(supplier);
     }
 
     /// Provides a closure that will be called when TCP packets are received from the roboRIO
     ///
     /// Example usage: Logging all stdout messages from robot code.
-    pub fn set_tcp_consumer(&mut self, consumer: impl FnMut(TcpPacket) + Send + Sync + 'static) {
-        block_on(self.state.tcp().lock()).set_tcp_consumer(consumer);
+    pub async fn set_tcp_consumer(
+        &mut self,
+        consumer: impl FnMut(TcpPacket) + Send + Sync + 'static,
+    ) {
+        self.state.tcp().write().await.set_tcp_consumer(consumer);
     }
 
     /// Changes the alliance for the given `DriverStation`
-    pub fn set_alliance(&mut self, alliance: Alliance) {
-        block_on(self.state.send().lock()).set_alliance(alliance);
+    pub async fn set_alliance(&mut self, alliance: Alliance) {
+        self.state.send().write().await.set_alliance(alliance);
     }
 
     /// Changes the given `mode` the robot will be in
-    pub fn set_mode(&mut self, mode: Mode) {
-        block_on(self.state.send().lock()).set_mode(mode);
+    pub async fn set_mode(&mut self, mode: Mode) {
+        self.state.send().write().await.set_mode(mode);
     }
 
-    pub fn ds_mode(&self) -> DsMode {
-        *block_on(self.state.send().lock()).ds_mode()
+    pub async fn ds_mode(&self) -> DsMode {
+        *self.state.send().read().await.ds_mode()
     }
 
     /// Changes the team number of this driver station, as well as the ip the driver station will attempt to connect to.
@@ -102,101 +105,115 @@ impl DriverStation {
     pub fn set_team_number(&mut self, team_number: u32) {
         self.team_number = team_number;
         self.thread_tx
-            .unbounded_send(Signal::NewTarget(ip_from_team_number(team_number)))
+            .send(Signal::NewTarget(ip_from_team_number(team_number)))
             .unwrap();
     }
 
     pub fn set_use_usb(&mut self, use_usb: bool) {
         if use_usb {
             self.thread_tx
-                .unbounded_send(Signal::NewTarget("172.22.11.2".to_string()))
+                .send(Signal::NewTarget("172.22.11.2".to_string()))
                 .unwrap();
         } else {
             self.thread_tx
-                .unbounded_send(Signal::NewTarget(ip_from_team_number(self.team_number)))
+                .send(Signal::NewTarget(ip_from_team_number(self.team_number)))
                 .unwrap();
         }
     }
 
-    pub fn team_number(&self) -> u32 {
+    #[inline(always)]
+    pub const fn team_number(&self) -> u32 {
         self.team_number
     }
 
     /// Sets the game specific message sent to the robot, and used during the autonomous period
-    pub fn set_game_specific_message(&mut self, message: &str) -> Result<()> {
+    pub async fn set_game_specific_message(&mut self, message: &str) -> Result<()> {
         if message.len() != 3 {
             bail!("Message should be 3 characters long");
         }
 
-        let _ = block_on(self.state.tcp().lock()).queue_tcp(TcpTag::GameData(GameData {
-            gsm: message.to_string(),
-        }));
+        let _ = self
+            .state
+            .tcp()
+            .write()
+            .await
+            .queue_tcp(TcpTag::GameData(GameData {
+                gsm: message.to_string(),
+            }));
         Ok(())
     }
 
     /// Returns the current mode of the robot
-    pub fn mode(&self) -> Mode {
-        *block_on(self.state.send().lock()).mode()
+    pub async fn mode(&self) -> Mode {
+        *self.state.send().read().await.mode()
     }
 
     /// Enables outputs on the robot
-    pub fn enable(&mut self) {
-        block_on(self.state.send().lock()).enable();
+    pub async fn enable(&mut self) {
+        self.state.send().write().await.enable();
     }
 
     /// Instructs the roboRIO to restart robot code
-    pub fn restart_code(&mut self) {
-        block_on(self.state.send().lock()).request(Request::RESTART_CODE);
+    pub async fn restart_code(&mut self) {
+        self.state
+            .send()
+            .write()
+            .await
+            .request(Request::RESTART_CODE);
     }
 
     /// Instructs the roboRIO to reboot
-    pub fn restart_roborio(&mut self) {
-        block_on(self.state.send().lock()).request(Request::REBOOT_ROBORIO);
+    pub async fn restart_roborio(&mut self) {
+        self.state
+            .send()
+            .write()
+            .await
+            .request(Request::REBOOT_ROBORIO);
     }
 
     /// Returns whether the robot is currently enabled
-    pub fn enabled(&self) -> bool {
-        block_on(self.state.send().lock()).enabled()
+    pub async fn enabled(&self) -> bool {
+        self.state.send().read().await.enabled()
     }
 
     /// Returns the last received Trace from the robot
-    pub fn trace(&self) -> Trace {
-        *block_on(self.state.recv().lock()).trace()
+    pub async fn trace(&self) -> Trace {
+        *self.state.recv().read().await.trace()
     }
 
     /// Returns the last received battery voltage from the robot
-    pub fn battery_voltage(&self) -> f32 {
-        block_on(self.state.recv().lock()).battery_voltage()
+    pub async fn battery_voltage(&self) -> f32 {
+        self.state.recv().read().await.battery_voltage()
     }
 
     /// Queues a UDP tag to be transmitted with the next outbound packet to the roboRIO
-    pub fn queue_udp(&mut self, udp_tag: UdpTag) {
-        block_on(self.state.send().lock()).queue_udp(udp_tag);
+    pub async fn queue_udp(&mut self, udp_tag: UdpTag) {
+        self.state.send().write().await.queue_udp(udp_tag);
     }
 
     /// Returns a Vec of the current contents of the UDP queue
-    pub fn udp_queue(&self) -> Vec<UdpTag> {
-        block_on(self.state.send().lock()).pending_udp().clone()
+    pub async fn udp_queue(&self) -> Vec<UdpTag> {
+        self.state.send().read().await.pending_udp().clone()
     }
 
     /// Queues a TCP tag to be transmitted to the roboRIO
-    pub fn queue_tcp(&mut self, tcp_tag: TcpTag) {
-        let _ = block_on(self.state.tcp().lock()).queue_tcp(tcp_tag);
+    pub async fn queue_tcp(&mut self, tcp_tag: TcpTag) {
+        let _ = self.state.tcp().write().await.queue_tcp(tcp_tag);
     }
 
     /// Disables outputs on the robot and disallows enabling it until the code is restarted.
-    pub fn estop(&mut self) {
-        block_on(self.state.send().lock()).estop();
+    pub async fn estop(&mut self) {
+        self.state.send().write().await.estop();
     }
 
     /// Returns whether the robot is currently E-stopped
-    pub fn estopped(&self) -> bool {
-        block_on(self.state.send().lock()).estopped()
+    pub async fn estopped(&self) -> bool {
+        self.state.send().read().await.estopped()
     }
 
     /// Disables outputs on the robot
-    pub fn disable(&mut self) {
-        block_on(self.state.send().lock()).disable();
+    pub async fn disable(&mut self) {
+        self.state.send().write().await.disable();
     }
 }
 
@@ -214,7 +231,8 @@ pub enum JoystickValue {
 }
 
 impl JoystickValue {
-    pub fn id(self) -> u8 {
+    #[inline(always)]
+    pub const fn id(self) -> u8 {
         match self {
             JoystickValue::Axis { id, .. } => id,
             JoystickValue::Button { id, .. } => id,
@@ -223,17 +241,17 @@ impl JoystickValue {
     }
 
     #[inline(always)]
-    pub fn is_axis(self) -> bool {
+    pub const fn is_axis(self) -> bool {
         matches!(self, JoystickValue::Axis { .. })
     }
 
     #[inline(always)]
-    pub fn is_button(self) -> bool {
+    pub const fn is_button(self) -> bool {
         matches!(self, JoystickValue::Button { .. })
     }
 
     #[inline(always)]
-    pub fn is_pov(self) -> bool {
+    pub const fn is_pov(self) -> bool {
         matches!(self, JoystickValue::POV { .. })
     }
 }
@@ -241,7 +259,7 @@ impl JoystickValue {
 impl Drop for DriverStation {
     fn drop(&mut self) {
         // When this struct is dropped the threads that we spawned should be stopped otherwise we're leaking
-        let _ = self.thread_tx.unbounded_send(Signal::Disconnect);
+        let _ = self.thread_tx.send(Signal::Disconnect);
     }
 }
 

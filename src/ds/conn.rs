@@ -3,19 +3,17 @@ use super::Signal;
 use crate::proto::udp::inbound::UdpResponsePacket;
 use crate::proto::udp::outbound::types::tags::{DateTime as DTTag, *};
 
-use futures_channel::mpsc::UnboundedReceiver;
-use futures_channel::mpsc::{UnboundedSender, unbounded};
+use chrono::{Datelike, Timelike, Utc};
 use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpStream, UdpSocket};
-use tokio::time;
-use tokio_stream::wrappers::IntervalStream;
+use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
+use tokio::time::timeout;
 use tokio_util::codec::Decoder;
 use tokio_util::udp::UdpFramed;
-
-use chrono::prelude::*;
 
 use crate::Result;
 use crate::proto::tcp::DsTcpCodec;
@@ -23,8 +21,6 @@ use crate::proto::udp::DsUdpCodec;
 
 use crate::ds::state::{DsMode, DsState};
 use crate::proto::tcp::outbound::TcpTag;
-use futures_util::future::Either;
-use futures_util::stream::select;
 
 mod backoff;
 
@@ -37,15 +33,15 @@ use std::io::ErrorKind;
 pub(crate) async fn udp_conn(
     state: Arc<DsState>,
     mut target_ip: String,
-    rx: UnboundedReceiver<Signal>,
+    mut rx: UnboundedReceiver<Signal>,
 ) -> Result<()> {
     let mut tcp_connected = false;
     let mut tcp_tx = None;
 
     let udp_rx = UdpSocket::bind("0.0.0.0:1150").await?;
-    let udp_rx = UdpFramed::new(udp_rx, DsUdpCodec);
+    let mut udp_rx = UdpFramed::new(udp_rx, DsUdpCodec);
 
-    let (fwd_tx, fwd_rx) = unbounded::<Signal>();
+    let (fwd_tx, mut fwd_rx) = unbounded_channel::<Signal>();
 
     let send_state = state.clone();
     let target = target_ip.clone();
@@ -58,16 +54,15 @@ pub(crate) async fn udp_conn(
             .await
             .expect("Failed to connect to target");
 
-        let interval = IntervalStream::new(time::interval(Duration::from_millis(20)));
+        let mut interval = tokio::time::interval(Duration::from_millis(20));
 
-        let mut stream = select(interval.map(Either::Left), fwd_rx.map(Either::Right));
+        //let mut stream = select(interval, fwd_rx);
         let mut backoff = ExponentialBackoff::new(Duration::new(5, 0));
 
         loop {
-            let item = stream.next().await.unwrap();
-            match item {
-                Either::Left(_) => {
-                    let mut state = send_state.send().lock().await;
+            tokio::select! {
+                _ = interval.tick() => {
+                    let mut state = send_state.send().write().await;
                     let v = state.control().encode();
                     // Massively overengineered considering the _only_ time that this actually starts
                     // to come into play is directly after the simulator is closed before the DS switches to Normal mode again
@@ -77,18 +72,18 @@ pub(crate) async fn udp_conn(
                         Err((e, dc)) => {
                             if e.kind() == ErrorKind::ConnectionRefused && dc {
                                 println!("Send socket disconnected");
-                                send_state.recv().lock().await.reset();
+                                send_state.recv().write().await.reset();
                             }
                         }
                     }
                     state.increment_seqnum();
                 }
-                Either::Right(sig) => match sig {
-                    Signal::NewTarget(ip) => {
-                        let mut state = send_state.send().lock().await;
+                sig = fwd_rx.recv() => match sig {
+                    Some(Signal::NewTarget(ip)) => {
+                        let mut state = send_state.send().write().await;
                         state.reset_seqnum();
                         state.disable();
-                        send_state.recv().lock().await.reset();
+                        send_state.recv().write().await.reset();
                         udp_tx = UdpSocket::bind("0.0.0.0:0")
                             .await
                             .expect("Failed to bind tx socket");
@@ -98,11 +93,11 @@ pub(crate) async fn udp_conn(
                             .expect("Failed to connect to new target");
                         backoff.reset();
                     }
-                    Signal::NewMode(DsMode::Simulation) => {
-                        let mut state = send_state.send().lock().await;
+                    Some(Signal::NewMode(DsMode::Simulation)) => {
+                        let mut state = send_state.send().write().await;
                         state.reset_seqnum();
                         state.disable();
-                        send_state.recv().lock().await.reset();
+                        send_state.recv().write().await.reset();
                         udp_tx
                             .connect("127.0.0.1:1110")
                             .await
@@ -117,22 +112,18 @@ pub(crate) async fn udp_conn(
 
     // I need the tokio extension for this, the futures extension to split codecs, and I can't import them both
     // Thanks for coordinating trait names to make using both nicely impossible
-    let fut = tokio_stream::StreamExt::timeout(udp_rx, Duration::from_secs(2)).map(Either::Left);
-    let rx_mapped = rx.map(Either::Right);
-    let stream = select(fut, rx_mapped);
-    tokio::pin!(stream);
 
     let mut connected = true;
-    while let Some(item) = stream.next().await {
-        match item {
-            Either::Left(packet) => match packet {
+    loop {
+        tokio::select! {
+            packet = timeout(Duration::from_secs(2), udp_rx.next()) => match packet {
                 Ok(timeout_result) => match timeout_result {
-                    Ok(packet) => {
+                    Some(Ok(packet)) => {
                         if !connected {
                             connected = true;
                         }
                         let (packet, _): (UdpResponsePacket, _) = packet;
-                        let mut _state = state.recv().lock().await;
+                        let mut _state = state.recv().write().await;
 
                         if packet.need_date {
                             let local = Utc::now();
@@ -144,13 +135,13 @@ pub(crate) async fn udp_conn(
                             let month = local.date_naive().month0() as u8;
                             let year = (local.date_naive().year() - 1900) as u8;
                             let tag = DTTag::new(micros, second, minute, hour, day, month, year);
-                            state.send().lock().await.queue_udp(UdpTag::DateTime(tag));
+                            state.send().write().await.queue_udp(UdpTag::DateTime(tag));
                         }
 
                         if !tcp_connected {
-                            let (tx, rx) = unbounded::<Signal>();
+                            let (tx, rx) = unbounded_channel::<Signal>();
                             tcp_tx = Some(tx);
-                            let mode = *state.send().lock().await.ds_mode();
+                            let mode = *state.send().read().await.ds_mode();
                             if mode == DsMode::Normal {
                                 tokio::spawn(tcp_conn(state.clone(), target_ip.clone(), rx));
                             } else {
@@ -160,7 +151,7 @@ pub(crate) async fn udp_conn(
                         }
 
                         if packet.status.emergency_stopped() {
-                            let mut send = state.send().lock().await;
+                            let mut send = state.send().write().await;
                             if !send.estopped() {
                                 send.estop();
                             }
@@ -169,43 +160,45 @@ pub(crate) async fn udp_conn(
                         _state.set_trace(packet.trace);
                         _state.set_battery_voltage(packet.battery);
                     }
-                    Err(e) => println!("Error decoding packet: {:?}", e),
+                    Some(Err(e)) => println!("Error decoding packet: {:?}", e),
+                    None => break,
                 },
                 Err(_) => {
                     if connected {
                         println!("RIO disconnected");
-                        state.recv().lock().await.reset();
+                        state.recv().write().await.reset();
                         connected = false;
                     }
                 }
             },
-            Either::Right(sig) => match sig {
-                Signal::Disconnect => return Ok(()),
-                Signal::NewTarget(ref target) => {
+            sig = rx.recv() => match sig {
+                Some(Signal::Disconnect) => return Ok(()),
+                Some(Signal::NewTarget(ref target)) => {
                     if let Some(ref tcp_tx) = tcp_tx {
-                        let _ = tcp_tx.unbounded_send(Signal::Disconnect);
+                        let _ = tcp_tx.send(Signal::Disconnect);
                         tcp_connected = false;
                     }
 
                     target_ip = target.clone();
 
-                    fwd_tx.unbounded_send(sig)?;
+                    fwd_tx.send(sig.unwrap())?;
                 }
-                Signal::NewMode(mode) => {
-                    let current_mode = *state.send().lock().await.ds_mode();
+                Some(Signal::NewMode(mode)) => {
+                    let current_mode = *state.send().read().await.ds_mode();
                     if mode != current_mode {
                         if let Some(ref tcp_tx) = tcp_tx {
-                            let _ = tcp_tx.unbounded_send(Signal::Disconnect);
+                            let _ = tcp_tx.send(Signal::Disconnect);
                             tcp_connected = false;
                         }
-                        state.send().lock().await.set_ds_mode(mode);
+                        state.send().write().await.set_ds_mode(mode);
                         if mode == DsMode::Normal {
                             println!("Exiting simulation mode");
-                            fwd_tx.unbounded_send(Signal::NewTarget(target_ip.clone()))?;
+                            fwd_tx.send(Signal::NewTarget(target_ip.clone()))?;
                         }
-                        fwd_tx.unbounded_send(sig)?;
+                        fwd_tx.send(sig.unwrap())?;
                     }
                 }
+                None => break,
             },
         }
     }
@@ -219,36 +212,37 @@ pub(crate) async fn udp_conn(
 pub(crate) async fn tcp_conn(
     state: Arc<DsState>,
     target_ip: String,
-    rx: UnboundedReceiver<Signal>,
+    mut rx: UnboundedReceiver<Signal>,
 ) -> Result<()> {
     let conn = TcpStream::connect(&format!("{}:1740", target_ip)).await?;
     let codec = DsTcpCodec.framed(conn);
-    let (mut codec_tx, codec_rx) = codec.split();
+    let (mut codec_tx, mut codec_rx) = codec.split();
 
-    let (tag_tx, tag_rx) = unbounded::<TcpTag>();
-    state.tcp().lock().await.set_tcp_tx(Some(tag_tx));
-
-    let stream = select(codec_rx.map(Either::Left), rx.map(Either::Right));
-    let mut stream = select(stream.map(Either::Left), tag_rx.map(Either::Right));
+    let (tag_tx, mut tag_rx) = unbounded_channel::<TcpTag>();
+    state.tcp().write().await.set_tcp_tx(Some(tag_tx));
 
     let state = state.tcp();
-    while let Some(msg) = stream.next().await {
-        match msg {
-            Either::Left(left) => match left {
-                Either::Left(packet) => {
+    loop {
+        tokio::select! {
+            packet = codec_rx.next() => match packet {
+                Some(packet) => {
                     if let Ok(packet) = packet {
-                        let mut state = state.lock().await;
+                        let mut state = state.write().await;
                         if let Some(ref mut consumer) = state.tcp_consumer {
                             consumer(packet);
                         }
                     }
-                }
-                Either::Right(_) => {
-                    state.lock().await.set_tcp_tx(None);
-                }
+                },
+                None => break,
             },
-            Either::Right(tag) => {
-                let _ = codec_tx.send(tag).await;
+            _ = rx.recv() => {
+                state.write().await.set_tcp_tx(None);
+            },
+            tag = tag_rx.recv() => match tag {
+                Some(tag) => {
+                    let _ = codec_tx.send(tag).await;
+                },
+                None => break,
             }
         }
     }
@@ -267,14 +261,13 @@ pub(crate) async fn sim_conn(tx: UnboundedSender<Signal>) -> Result<()> {
             Ok(_) => {
                 if opmode != DsMode::Simulation {
                     opmode = DsMode::Simulation;
-                    tx.unbounded_send(Signal::NewMode(DsMode::Simulation))
-                        .unwrap();
+                    tx.send(Signal::NewMode(DsMode::Simulation)).unwrap();
                 }
             }
             Err(_) => {
                 if opmode != DsMode::Normal {
                     opmode = DsMode::Normal;
-                    tx.unbounded_send(Signal::NewMode(DsMode::Normal)).unwrap();
+                    tx.send(Signal::NewMode(DsMode::Normal)).unwrap();
                 }
             }
         }

@@ -27,7 +27,7 @@ pub struct SendState {
 }
 
 impl SendState {
-    pub fn new(alliance: Alliance) -> SendState {
+    pub const fn new(alliance: Alliance) -> SendState {
         SendState {
             mode: Mode::Autonomous,
             udp_seqnum: 0,
@@ -49,7 +49,8 @@ impl SendState {
         self.pending_udp.push(tag);
     }
 
-    pub fn pending_udp(&self) -> &Vec<UdpTag> {
+    #[inline(always)]
+    pub const fn pending_udp(&self) -> &Vec<UdpTag> {
         &self.pending_udp
     }
 
@@ -144,7 +145,8 @@ impl SendState {
         }
     }
 
-    pub fn mode(&self) -> &Mode {
+    #[inline(always)]
+    pub const fn mode(&self) -> &Mode {
         &self.mode
     }
 
@@ -152,7 +154,8 @@ impl SendState {
         self.mode = mode;
     }
 
-    pub fn ds_mode(&self) -> &DsMode {
+    #[inline(always)]
+    pub const fn ds_mode(&self) -> &DsMode {
         &self.dsmode
     }
 
@@ -169,7 +172,8 @@ impl SendState {
     }
 
     #[allow(unused)]
-    pub fn seqnum(&self) -> u16 {
+    #[inline(always)]
+    pub const fn seqnum(&self) -> u16 {
         self.udp_seqnum
     }
 
@@ -181,7 +185,8 @@ impl SendState {
         self.enabled = false;
     }
 
-    pub fn enabled(&self) -> bool {
+    #[inline(always)]
+    pub const fn enabled(&self) -> bool {
         self.enabled
     }
 
@@ -190,7 +195,8 @@ impl SendState {
         self.estopped = true;
     }
 
-    pub fn estopped(&self) -> bool {
+    #[inline(always)]
+    pub const fn estopped(&self) -> bool {
         self.estopped
     }
 }
