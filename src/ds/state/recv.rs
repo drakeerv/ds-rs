@@ -4,7 +4,7 @@ use crate::ds::state::TcpConsumer;
 use crate::proto::tcp::outbound::TcpTag;
 use crate::proto::udp::inbound::types::*;
 use anyhow::format_err;
-use futures_channel::mpsc::UnboundedSender;
+use tokio::sync::mpsc::UnboundedSender;
 
 /// All the data received from roboRIO UDP status packets that isn't already encoded in the send state
 pub struct RecvState {
@@ -30,7 +30,7 @@ pub struct TcpState {
 }
 
 impl TcpState {
-    pub fn new() -> TcpState {
+    pub const fn new() -> TcpState {
         TcpState {
             tcp_consumer: None,
             pending_tcp: None,
@@ -42,7 +42,7 @@ impl TcpState {
         self.pending_tcp
             .clone()
             .ok_or_else(|| format_err!("TCP task not spawned."))
-            .and_then(move |tx| tx.unbounded_send(tag).map_err(|e| e.into()))
+            .and_then(move |tx| tx.send(tag).map_err(|e| e.into()))
             .map(|_| ())
     }
 
@@ -56,14 +56,15 @@ impl TcpState {
 }
 
 impl RecvState {
-    pub fn new() -> RecvState {
+    pub const fn new() -> RecvState {
         RecvState {
             battery_voltage: 0f32,
             trace: Trace::empty(),
         }
     }
 
-    pub fn battery_voltage(&self) -> f32 {
+    #[inline(always)]
+    pub const fn battery_voltage(&self) -> f32 {
         self.battery_voltage
     }
 
@@ -71,7 +72,8 @@ impl RecvState {
         self.battery_voltage = voltage;
     }
 
-    pub fn trace(&self) -> &Trace {
+    #[inline(always)]
+    pub const fn trace(&self) -> &Trace {
         &self.trace
     }
 

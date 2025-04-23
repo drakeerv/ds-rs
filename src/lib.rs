@@ -9,6 +9,8 @@
 //! provide joystick input using arbitrary APIs, and to consume any incoming TCP packets.
 
 #![doc(html_root_url = "https://docs.rs/ds/1.0.1")]
+#![forbid(unsafe_code)]
+#![allow(dead_code)]
 
 #[macro_use]
 extern crate bitflags;

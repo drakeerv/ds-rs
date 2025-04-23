@@ -41,7 +41,8 @@ pub struct Countdown {
 }
 
 impl Countdown {
-    pub fn new(seconds: f32) -> Countdown {
+    #[inline(always)]
+    pub const fn new(seconds: f32) -> Countdown {
         Countdown {
             seconds_remaining: seconds,
         }
@@ -49,6 +50,7 @@ impl Countdown {
 }
 
 impl Tag for Countdown {
+    #[inline(always)]
     fn id(&self) -> usize {
         0x07
     }
@@ -70,7 +72,8 @@ pub struct Joysticks {
 }
 
 impl Joysticks {
-    pub fn new(axes: Vec<i8>, buttons: Vec<bool>, povs: Vec<i16>) -> Joysticks {
+    #[inline(always)]
+    pub const fn new(axes: Vec<i8>, buttons: Vec<bool>, povs: Vec<i16>) -> Joysticks {
         Joysticks {
             axes,
             buttons,
@@ -80,6 +83,7 @@ impl Joysticks {
 }
 
 impl Tag for Joysticks {
+    #[inline(always)]
     fn id(&self) -> usize {
         0x0c
     }
@@ -119,7 +123,8 @@ pub struct DateTime {
 }
 
 impl DateTime {
-    pub fn new(
+    #[inline(always)]
+    pub const fn new(
         micros: u32,
         second: u8,
         minute: u8,
@@ -141,6 +146,7 @@ impl DateTime {
 }
 
 impl Tag for DateTime {
+    #[inline(always)]
     fn id(&self) -> usize {
         0x0f
     }
@@ -166,12 +172,14 @@ pub struct Timezone {
 }
 
 impl Timezone {
-    pub fn new(tz: &str) -> Timezone {
-        Timezone { tz: tz.to_string() }
+    #[inline(always)]
+    pub fn new(tz: impl Into<String>) -> Timezone {
+        Timezone { tz: tz.into() }
     }
 }
 
 impl Tag for Timezone {
+    #[inline(always)]
     fn id(&self) -> usize {
         0x10
     }

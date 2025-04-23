@@ -3,14 +3,15 @@ use std::time::Duration;
 use tokio::time;
 
 pub struct ExponentialBackoff {
-    attempt: u8,
+    attempt: u32,
     max_timeout: Duration,
     use_max: bool,
     timeout: Option<Duration>,
 }
 
 impl ExponentialBackoff {
-    pub fn new(max_timeout: Duration) -> ExponentialBackoff {
+    #[inline(always)]
+    pub const fn new(max_timeout: Duration) -> ExponentialBackoff {
         ExponentialBackoff {
             attempt: 0,
             max_timeout,
@@ -18,6 +19,7 @@ impl ExponentialBackoff {
             timeout: None,
         }
     }
+
     pub async fn run<O, E>(
         &mut self,
         fut: impl Future<Output = Result<O, E>>,
@@ -52,11 +54,9 @@ impl ExponentialBackoff {
             return;
         }
 
-        let random_delay = Duration::from_millis(fastrand::u64(1..=1000));
+        let backoff_millis = 20u64.pow(self.attempt);
 
-        let backoff_seconds = 2u64.pow(self.attempt as u32);
-
-        let delay = (Duration::new(backoff_seconds, 0) + random_delay).min(self.max_timeout);
+        let delay = Duration::from_millis(backoff_millis).min(self.max_timeout);
         if delay == self.max_timeout {
             self.use_max = true;
         }
