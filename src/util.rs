@@ -5,7 +5,7 @@ use bytes::Buf;
 /// Byte Order: First chunk of 8 booleans corresponds to the *last* byte in the output.
 pub(crate) fn to_u8_vec(vec_in: &[bool]) -> Vec<u8> {
     // Calculate needed bytes, rounding up
-    let num_bytes = (vec_in.len() + 7) / 8;
+    let num_bytes = vec_in.len().div_ceil(8);
     let mut result = Vec::with_capacity(num_bytes);
 
     // Iterate over input in chunks of 8
