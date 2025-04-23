@@ -35,10 +35,11 @@ pub struct DsState {
 }
 
 impl DsState {
-    pub fn new(alliance: Alliance) -> DsState {
-        let send_state = RwLock::new(SendState::new(alliance));
-        let recv_state = RwLock::new(RecvState::new());
-        let tcp_state = RwLock::new(TcpState::new());
+    #[inline(always)]
+    pub const fn new(alliance: Alliance) -> DsState {
+        let send_state = RwLock::const_new(SendState::new(alliance));
+        let recv_state = RwLock::const_new(RecvState::new());
+        let tcp_state = RwLock::const_new(TcpState::new());
 
         DsState {
             send_state,
@@ -73,12 +74,13 @@ pub enum Mode {
 
 impl Mode {
     /// Decodes the mode of the robot from the given status byte
-    pub fn from_status(status: Status) -> Option<Mode> {
-        if status & Status::TELEOP == Status::TELEOP {
+    #[inline]
+    pub const fn from_status(status: Status) -> Option<Mode> {
+        if status.contains(Status::TELEOP) {
             Some(Mode::Teleoperated)
-        } else if status & Status::AUTO == Status::AUTO {
+        } else if status.contains(Status::AUTO) {
             Some(Mode::Autonomous)
-        } else if status & Status::TEST == Status::TEST {
+        } else if status.contains(Status::TEST) {
             Some(Mode::Test)
         } else {
             None

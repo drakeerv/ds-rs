@@ -28,7 +28,7 @@ fn reverse_byte(mut byte: u8) -> u8 {
 
 /// Converts the given team number into a String containing the IP of the roboRIO
 /// Assumes the roboRIO will exist at 10.TE.AM.2
-pub(crate) fn ip_from_team_number(team: u32) -> String {
+pub(crate) fn ip_from_team_number(team: u16) -> String {
     let s = team.to_string();
 
     match s.len() {

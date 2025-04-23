@@ -67,8 +67,8 @@ impl OutgoingTcpTag for GameData {
 #[derive(Debug, Copy, Clone)]
 #[allow(unused)]
 pub enum MatchType {
-    None = 0,
+    MatchTest = 0,
     Practice = 1,
-    Qualifications = 2,
-    Eliminations = 3,
+    Qualification = 2,
+    Playoff = 3,
 }
