@@ -1,6 +1,6 @@
 use crate::proto::udp::inbound::UdpResponsePacket;
 use crate::proto::udp::outbound::UdpControlPacket;
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use tokio_util::codec::{Decoder, Encoder};
 
 pub mod inbound;
@@ -14,11 +14,8 @@ impl Decoder for DsUdpCodec {
     type Error = anyhow::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let mut buf = src.clone().freeze();
-
-        match UdpResponsePacket::decode(&mut buf) {
-            Ok((packet, len)) => {
-                src.advance(len);
+        match UdpResponsePacket::decode(src) {
+            Ok(packet) => {
                 Ok(Some(packet))
             }
             // In other Decoder implementations, the error is checked and if it was due
@@ -34,7 +31,8 @@ impl Encoder<UdpControlPacket> for DsUdpCodec {
     type Error = anyhow::Error;
 
     fn encode(&mut self, item: UdpControlPacket, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        dst.extend(item.encode().iter());
+        println!("a");
+        dst.extend(item.encode());
 
         Ok(())
     }

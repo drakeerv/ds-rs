@@ -18,6 +18,7 @@ pub trait BufExt: Buf {
         if self.remaining() >= 2 {
             Ok(self.get_u16())
         } else {
+            panic!("skibidi dop dop");
             Err(Error::new(ErrorKind::UnexpectedEof, "self.remaining() < 2"))
         }
     }

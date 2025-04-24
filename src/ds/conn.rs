@@ -1,7 +1,7 @@
 use super::Signal;
 
 use crate::proto::udp::inbound::UdpResponsePacket;
-use crate::proto::udp::outbound::types::tags::{DateTime as DTTag, *};
+use crate::proto::udp::outbound::types::{DateTime as DTTag, *};
 
 use chrono::{Datelike, Timelike, Utc};
 use futures_util::sink::SinkExt;
@@ -123,7 +123,6 @@ pub(crate) async fn udp_conn(
                             connected = true;
                         }
                         let (packet, _): (UdpResponsePacket, _) = packet;
-                        let mut _state = state.recv().write().await;
 
                         if packet.need_date {
                             let local = Utc::now();
@@ -157,8 +156,9 @@ pub(crate) async fn udp_conn(
                             }
                         }
 
-                        _state.set_trace(packet.trace);
-                        _state.set_battery_voltage(packet.battery);
+                        let mut state = state.recv().write().await;
+                        state.set_trace(packet.trace);
+                        state.set_battery_voltage(packet.battery);
                     }
                     Some(Err(e)) => println!("Error decoding packet: {:?}", e),
                     None => break,
