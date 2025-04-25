@@ -12,7 +12,6 @@ use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 use crate::proto::tcp::outbound::{GameData, TcpTag};
 use crate::proto::udp::inbound::types::Trace;
-use crate::proto::udp::outbound::types::tags::UdpTag;
 use crate::proto::udp::outbound::types::*;
 use crate::util::ip_from_team_number;
 use crate::{Result, TcpPacket};
@@ -34,7 +33,7 @@ impl DriverStation {
     /// if the roboRIO is at a different ip, use [new] and specify the ip directly.
     pub async fn new_team(team_number: u16, alliance: Alliance) -> DriverStation {
         Self::new(
-            &ip_from_team_number(team_number).expect("Invalid Team Number"),
+            &ip_from_team_number(team_number),
             alliance,
             team_number,
         )
@@ -111,7 +110,7 @@ impl DriverStation {
         self.team_number = team_number;
         self.thread_tx
             .send(Signal::NewTarget(
-                ip_from_team_number(team_number).expect("Invalid Team Number"),
+                ip_from_team_number(team_number),
             ))
             .unwrap();
     }
@@ -124,7 +123,7 @@ impl DriverStation {
         } else {
             self.thread_tx
                 .send(Signal::NewTarget(
-                    ip_from_team_number(self.team_number).expect("Invalid Team Number"),
+                    ip_from_team_number(self.team_number),
                 ))
                 .unwrap();
         }

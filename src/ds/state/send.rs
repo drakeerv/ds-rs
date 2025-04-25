@@ -1,8 +1,7 @@
 use crate::ds::state::{DsMode, JoystickSupplier};
-use crate::proto::udp::outbound::types::tags::*;
 use crate::proto::udp::outbound::types::{Control, Request};
 use crate::proto::udp::outbound::*;
-use crate::{Alliance, JoystickValue, Mode};
+use crate::{Alliance, JoystickValue, Joysticks, Mode, Tag, UdpTag};
 use std::f32;
 
 /// State containing all the data relevant to constructing a UDP control packet to the roboRIO

@@ -1,6 +1,5 @@
 pub mod types;
 
-use self::types::tags::*;
 use self::types::*;
 use bytes::{BufMut, Bytes, BytesMut};
 
